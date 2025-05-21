@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: schedule_postgres
+    environment:
+      POSTGRES_USER: schedule_user
+      POSTGRES_PASSWORD: schedule_pass
+      POSTGRES_DB: schedule_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./downloaded_files:/app/downloaded_files
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U schedule_user -d schedule_db" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  parser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python main.py
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+      - ./downloaded_files:/app/downloaded_files
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uvicorn api.api:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
